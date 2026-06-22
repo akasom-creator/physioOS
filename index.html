@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhysioOS — Swarm Simulation Environment</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: #a0f0c0; }
+    #canvas-container { width: 100vw; height: 100vh; display: block; background: radial-gradient(ellipse at center, #000d1a 0%, #000000 75%); }
+
+    /* ── Title overlay ─────────────────────────────────────────────────────── */
+    #title-overlay {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      pointer-events: none;
+      z-index: 10;
+      width: max-content;
+      max-width: calc(100vw - 360px);
+    }
+    #title-overlay h1 {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #80ffcc;
+      text-shadow: 0 0 12px #00ffaa88;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+    #title-overlay p {
+      font-size: 0.85rem;
+      color: #50b08080;
+      margin-top: 5px;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Control panel (top-right) ─────────────────────────────────────────── */
+    #ui-panel {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: min(320px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+      background: rgba(0, 10, 20, 0.90);
+      border: 1px solid #0a4040;
+      border-radius: 8px;
+      padding: 18px;
+      z-index: 10;
+    }
+    #ui-panel::-webkit-scrollbar { width: 3px; }
+    #ui-panel::-webkit-scrollbar-thumb { background: #0a4040; border-radius: 2px; }
+    #ui-panel label { font-size: 15px; color: #60c0a0; display: block; margin-bottom: 5px; }
+    #ui-panel input[type=range] { width: 100%; margin-bottom: 14px; accent-color: #00ffaa; }
+    #ui-panel button {
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 11px 0;
+      background: #003030;
+      border: 1px solid #00aa66;
+      color: #80ffcc;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 15px;
+      letter-spacing: 0.05em;
+    }
+    #ui-panel button:hover { background: #005050; }
+
+    /* ── Stats panel (inside control panel) ───────────────────────────────── */
+    #stats-panel {
+      margin-top: 12px;
+      border-top: 1px solid #0a3030;
+      padding-top: 12px;
+      font-size: 15px;
+      color: #40a070;
+      line-height: 2;
+    }
+    #stats-panel span { color: #80ffcc; }
+
+    /* ── WebGL context-loss overlay ───────────────────────────────────────── */
+    #context-loss-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.88);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      text-align: center;
+      color: #ff4444;
+      font-size: 1rem;
+    }
+    #context-loss-overlay.visible { display: flex; }
+    #context-loss-overlay h2 { font-size: 1.3rem; margin-bottom: 12px; text-shadow: 0 0 16px #ff2200; }
+    #context-loss-overlay button {
+      margin-top: 16px;
+      padding: 8px 24px;
+      background: #1a0000;
+      border: 1px solid #ff4444;
+      color: #ffaaaa;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.9rem;
+    }
+
+    /* ── System log panel (bottom-left on wide screens) ───────────────────── */
+    #log-panel {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      width: min(400px, calc(100vw - 24px));
+      background: rgba(4, 8, 4, 0.92);
+      border: 1px solid #0a3020;
+      border-radius: 6px;
+      z-index: 10;
+      overflow: hidden;
+    }
+    #log-panel-header {
+      padding: 6px 12px;
+      font-size: 13px;
+      color: #30a060;
+      border-bottom: 1px solid #0a3020;
+      letter-spacing: 0.08em;
+      background: rgba(0,20,10,0.6);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #log-entries {
+      height: 150px;
+      overflow-y: auto;
+      padding: 8px 10px;
+      font-size: 13px;
+      line-height: 1.8;
+      scroll-behavior: smooth;
+    }
+    #log-entries::-webkit-scrollbar { width: 4px; }
+    #log-entries::-webkit-scrollbar-track { background: #050a05; }
+    #log-entries::-webkit-scrollbar-thumb { background: #0a4020; border-radius: 2px; }
+    .log-sense   { color: #00e5ff; }
+    .log-signal  { color: #ffee00; }
+    .log-quorum  { color: #44ff88; }
+    .log-warning { color: #ff4444; }
+    .log-system  { color: #cccccc; }
+    .log-report  { color: #80c0ff; }
+
+    /* ── Narrow screens (≤ 600px): hide log, shrink control panel ─────────── */
+    @media (max-width: 600px) {
+      #log-panel { display: none; }
+      #title-overlay { max-width: calc(100vw - 200px); }
+      #ui-panel { width: min(200px, calc(100vw - 16px)); padding: 10px; }
+      #ui-panel label, #stats-panel { font-size: 13px; }
+      #ui-panel button { font-size: 13px; padding: 8px 0; }
+    }
+
+    /* ── Medium screens (601–900px): shrink log height ────────────────────── */
+    @media (min-width: 601px) and (max-width: 900px) {
+      #log-entries { height: 100px; }
+      #log-panel { width: min(300px, calc(100vw - 260px)); }
+    }
+
+    /* ── Short viewports (landscape phone/tablet): reduce log height ─────── */
+    @media (max-height: 500px) {
+      #log-entries { height: 80px; }
+      #ui-panel { max-height: calc(100vh - 16px); }
+      #title-overlay { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- WebGL context-loss error overlay (Requirement 6.5) -->
+  <div id="context-loss-overlay">
+    <h2>⚠ WebGL Context Lost</h2>
+    <p>The GPU context was lost. This can happen when the tab is backgrounded for a long time.</p>
+    <button onclick="window.location.reload()">Reload Simulation</button>
+  </div>
+
+  <!-- Title overlay (Requirement 6.6) -->
+  <div id="title-overlay">
+    <h1>PhysioOS — Swarm Simulation Environment</h1>
+    <p>Distributed nanoscale agents navigating a vascular network under quorum consensus</p>
+  </div>
+
+  <!-- PhysioAPI Control Panel (placeholder for Phase 4; wired in ui.js) -->
+  <div id="ui-panel">
+    <label>Agents: <span id="agent-count-label">500</span></label>
+    <input type="range" id="agent-slider" min="200" max="2000" value="500" step="50" />
+    <label>Quorum Threshold: <span id="threshold-label">0.85</span></label>
+    <input type="range" id="threshold-slider" min="0.5" max="1.0" value="0.85" step="0.01" />
+    <label>Biomarker Target:</label>
+    <select id="biomarker-select" style="width:100%;margin-bottom:14px;background:#001515;border:1px solid #0a4040;color:#80ffcc;padding:6px;border-radius:4px;font-family:inherit;font-size:15px;">
+      <option>HER2+</option>
+      <option>PD-L1+</option>
+      <option>EGFR+</option>
+    </select>
+    <button id="deploy-btn">Deploy Swarm</button>
+    <button id="recall-btn">Recall</button>
+    <div id="stats-panel">
+      Flagged: <span id="stat-flagged">0</span> / <span id="stat-total">0</span><br/>
+      False Positives: <span id="stat-fp">0</span><br/>
+      Tick: <span id="stat-tick">0</span><br/>
+      Searching: <span id="stat-searching">0</span>%&nbsp; Converging: <span id="stat-converging">0</span>%
+    </div>
+  </div>
+
+  <!-- Three.js r128 from CDN (Requirement 7.4) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- System log panel -->
+  <div id="log-panel">
+    <div id="log-panel-header">┌─ PHYSIOOS SYSTEM LOG ──────────────────────────────────────────</div>
+    <div id="log-entries"></div>
+  </div>
+
+  <script src="kernel.js"></script>
+  <script src="simulation.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>

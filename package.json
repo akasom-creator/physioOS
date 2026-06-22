@@ -1,0 +1,12 @@
+{
+    "name": "physio-os-swarm",
+    "version": "1.0.0",
+    "type": "commonjs",
+    "scripts": {
+        "test": "jest --testPathPattern=physio-os-swarm.test.js --runInBand"
+    },
+    "devDependencies": {
+        "fast-check": "3.21.0",
+        "jest": "29.7.0"
+    }
+}
